@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>D3 Lab – Data Pipeline Visualizations</title>
+<style>
+body { font-family: "Segoe UI", Arial, sans-serif; margin: 24px; background: #fafafa; color: #222; }
+h1 { font-size: 22px; margin-bottom: 4px; }
+p.subtitle { color: #555; margin-top: 0; }
+.tabs { display: flex; gap: 8px; margin: 18px 0; }
+.tabs button {
+  padding: 10px 18px; font-size: 14px; cursor: pointer;
+  border: 1px solid #4C78A8; background: #fff; color: #4C78A8;
+  border-radius: 6px;
+}
+.tabs button.active { background: #4C78A8; color: #fff; }
+.panel { display: none; background: #fff; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
+.panel.active { display: block; }
+</style>
+</head>
+<body>
+<h1>LAB 5: Interactive D3.js Visualizations of a Data Pipeline</h1>
+<p class="subtitle">Force-directed graph, Sankey diagram and treemap &mdash; hover, drag and explore.</p>
+
+<div class="tabs">
+  <button id="tab-force" class="active" onclick="showTab('force')">Force-directed Graph</button>
+  <button id="tab-sankey" onclick="showTab('sankey')">Sankey Diagram</button>
+  <button id="tab-treemap" onclick="showTab('treemap')">Treemap</button>
+</div>
+
+<div id="panel-force" class="panel active">
+  <div id="force-graph"></div>
+</div>
+<div id="panel-sankey" class="panel">
+  <div id="sankey-graph"></div>
+</div>
+<div id="panel-treemap" class="panel">
+  <div id="treemap-graph"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12/dist/d3-sankey.min.js"></script>
+<script>
+function showTab(name) {
+  ["force", "sankey", "treemap"].forEach(t => {
+    document.getElementById("panel-" + t).classList.toggle("active", t === name);
+    document.getElementById("tab-" + t).classList.toggle("active", t === name);
+  });
+}
+</script>
+
+<script>
+/* ============ Task 1: Force-directed graph (7 pipeline stages) ============ */
+(function () {
+const width = 700, height = 450;
+const nodes = [
+{id: "Data Cleaning"}, {id: "EDA"}, {id: "Feature Engineering"},
+{id: "Model Training"}, {id: "Evaluation"}, {id: "Visualization"},
+{id: "Deployment"}
+];
+const links = [
+{source: "Data Cleaning", target: "EDA"},
+{source: "EDA", target: "Feature Engineering"},
+{source: "Feature Engineering", target: "Model Training"},
+{source: "Model Training", target: "Evaluation"},
+{source: "Evaluation", target: "Visualization"},
+{source: "Visualization", target: "Deployment"},
+{source: "EDA", target: "Visualization"}
+];
+const svg = d3.select("#force-graph").append("svg")
+.attr("width", width).attr("height", height)
+.style("border", "1px solid #ccc");
+const simulation = d3.forceSimulation(nodes)
+.force("link", d3.forceLink(links).id(d => d.id).distance(110))
+.force("charge", d3.forceManyBody().strength(-320))
+.force("center", d3.forceCenter(width / 2, height / 2));
+const link = svg.append("g")
+.selectAll("line").data(links).join("line")
+.attr("stroke", "#999").attr("stroke-width", 1.5);
+const node = svg.append("g")
+.selectAll("circle").data(nodes).join("circle")
+.attr("r", 10).attr("fill", "#4C78A8")
+.call(d3.drag()
+.on("start", (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+.on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+.on("end", (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+const label = svg.append("g")
+.selectAll("text").data(nodes).join("text")
+.text(d => d.id).attr("font-size", 11).attr("dx", 14).attr("dy", 4);
+simulation.on("tick", () => {
+link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+.attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+node.attr("cx", d => d.x).attr("cy", d => d.y);
+label.attr("x", d => d.x).attr("y", d => d.y);
+});
+})();
+
+/* ============ Task 2: Sankey diagram (sources -> stages -> deployment) ============ */
+(function () {
+function draw() {
+const width = 900, height = 450;
+const nodes = [
+{name: "Web Logs"}, {name: "Mobile App"}, {name: "CRM Export"},
+{name: "Data Cleaning"}, {name: "Rejected"}, {name: "EDA"},
+{name: "Feature Engineering"}, {name: "Model Training"},
+{name: "Evaluation"}, {name: "Visualization"}, {name: "Deployment"}
+];
+const links = [
+{source: "Web Logs", target: "Data Cleaning", value: 5000},
+{source: "Mobile App", target: "Data Cleaning", value: 3000},
+{source: "CRM Export", target: "Data Cleaning", value: 2000},
+{source: "Data Cleaning", target: "EDA", value: 8500},
+{source: "Data Cleaning", target: "Rejected", value: 1500},
+{source: "EDA", target: "Feature Engineering", value: 6000},
+{source: "EDA", target: "Visualization", value: 2500},
+{source: "Feature Engineering", target: "Model Training", value: 4800},
+{source: "Feature Engineering", target: "Evaluation", value: 1200},
+{source: "Model Training", target: "Evaluation", value: 4800},
+{source: "Evaluation", target: "Deployment", value: 5000},
+{source: "Evaluation", target: "Visualization", value: 1000}
+];
+const svg = d3.select("#sankey-graph").append("svg")
+.attr("width", width).attr("height", height)
+.style("border", "1px solid #ccc");
+const graph = d3.sankey()
+.nodeId(d => d.name).nodeWidth(16).nodePadding(20)
+.extent([[10, 10], [width - 10, height - 10]])
+({nodes: nodes.map(d => ({...d})), links: links.map(d => ({...d}))});
+const color = d3.scaleOrdinal(d3.schemeTableau10);
+svg.append("g")
+.selectAll("path").data(graph.links).join("path")
+.attr("d", d3.sankeyLinkHorizontal())
+.attr("fill", "none")
+.attr("stroke", d => color(d.source.name))
+.attr("stroke-opacity", 0.4)
+.attr("stroke-width", d => Math.max(1, d.width));
+const node = svg.append("g")
+.selectAll("rect").data(graph.nodes).join("rect")
+.attr("x", d => d.x0).attr("y", d => d.y0)
+.attr("width", d => d.x1 - d.x0).attr("height", d => d.y1 - d.y0)
+.attr("fill", d => color(d.name))
+.on("mouseover", function (event, d) {
+d3.select(this).transition().duration(200)
+.attr("fill", d3.color(color(d.name)).brighter(0.7));
+})
+.on("mouseout", function (event, d) {
+d3.select(this).transition().duration(200)
+.attr("fill", color(d.name));
+});
+svg.append("g")
+.selectAll("text").data(graph.nodes).join("text")
+.text(d => d.name).attr("font-size", 11)
+.attr("x", d => d.x0 < width / 2 ? d.x1 + 6 : d.x0 - 6)
+.attr("y", d => (d.y0 + d.y1) / 2).attr("dy", "0.35em")
+.attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end");
+}
+(function wait() {
+if (window.d3 && window.d3.sankey) draw(); else setTimeout(wait, 50);
+})();
+})();
+
+/* ============ Task 3: Treemap (pipeline data volumes) ============ */
+(function () {
+function drawTreemap() {
+const width = 900, height = 540;
+const data = {
+name: "Data Pipeline",
+children: [
+{ name: "Input Sources", children: [
+  { name: "Web Logs", value: 5000 },
+  { name: "Mobile App", value: 3000 },
+  { name: "CRM Export", value: 2000 }
+]},
+{ name: "Processing Stages", children: [
+  { name: "Data Cleaning", value: 1800 },
+  { name: "EDA", value: 2200 },
+  { name: "Feature Engineering", value: 1600 },
+  { name: "Model Training", value: 1200 },
+  { name: "Evaluation", value: 900 },
+  { name: "Visualization", value: 800 },
+  { name: "Deployment", value: 500 }
+]}
+]
+};
+const svg = d3.select("#treemap-graph").append("svg")
+.attr("width", width).attr("height", height)
+.style("border", "1px solid #ccc");
+const root = d3.hierarchy(data)
+.sum(d => d.value)
+.sort((a, b) => b.value - a.value);
+d3.treemap()
+.size([width, height - 40])
+.padding(3)
+.round(true)(root);
+const color = d3.scaleOrdinal()
+.domain(["Input Sources", "Processing Stages"])
+.range(["#4C78A8", "#F58518"]);
+const cell = svg.selectAll("g")
+.data(root.leaves()).join("g")
+.attr("transform", d => `translate(${d.x0},${d.y0})`);
+cell.append("rect")
+.attr("width", d => d.x1 - d.x0)
+.attr("height", d => d.y1 - d.y0)
+.attr("fill", d => color(d.parent.data.name))
+.attr("stroke", "#fff")
+.on("mouseover", function (event, d) {
+d3.select(this).transition().duration(200)
+.attr("fill", d3.color(color(d.parent.data.name)).brighter(0.7));
+})
+.on("mouseout", function (event, d) {
+d3.select(this).transition().duration(200)
+.attr("fill", color(d.parent.data.name));
+});
+cell.append("text")
+.text(d => {
+const maxChars = Math.floor((d.x1 - d.x0 - 12) / 6.8);
+return d.data.name.length > maxChars ? d.data.name.slice(0, Math.max(4, maxChars - 1)) + "…" : d.data.name;
+})
+.attr("x", 6).attr("y", 16)
+.attr("font-size", 12).attr("font-weight", "bold").attr("fill", "#fff")
+.style("display", d => (d.x1 - d.x0 > 90 && d.y1 - d.y0 > 36) ? null : "none");
+cell.append("text")
+.text(d => d.data.value.toLocaleString() + " records")
+.attr("x", 6).attr("y", 32)
+.attr("font-size", 10).attr("fill", "#fff")
+.style("display", d => (d.x1 - d.x0 > 90 && d.y1 - d.y0 > 36) ? null : "none");
+const legend = svg.append("g").attr("transform", `translate(${width - 230}, ${height - 26})`);
+["Input Sources", "Processing Stages"].forEach((name, i) => {
+legend.append("rect").attr("x", i * 110).attr("y", 0)
+.attr("width", 12).attr("height", 12).attr("fill", color(name));
+legend.append("text").attr("x", i * 110 + 16).attr("y", 10)
+.attr("font-size", 11).text(name);
+});
+}
+(function wait() {
+if (window.d3) drawTreemap(); else setTimeout(wait, 50);
+})();
+})();
+</script>
+</body>
+</html>
